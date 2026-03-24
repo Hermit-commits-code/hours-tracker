@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hours Tracker</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header" role="banner">
+      <div class="container header-inner">
+        <h1 id="app-title">Hours Tracker</h1>
+        <div class="header-controls">
+          <button type="button" id="export-csv" class="btn">Export CSV</button>
+          <button type="button" id="login-btn">Login</button>
+        </div>
+      </div>
+    </header>
+    <main class="container main-grid" role="main">
+      <!-- Clock Card -->
+      <section
+        id="clock-card"
+        class="card"
+        aria-labelledby="clock-card-heading"
+      >
+        <h2 id="clock-card-heading" class="sr-only">Clock Control</h2>
+        <!-- clock status -->
+        <div class="clock-status" id="clock-status">
+          <p id="status-text">
+            You are currently <strong id="status-state">clocked out</strong>
+          </p>
+          <p id="status-since" class="muted"></p>
+        </div>
+        <!-- clock actions -->
+        <div class="clock-actions">
+          <button
+            type="button"
+            id="clock-toggle"
+            class="btn btn-primary"
+            aria-live="polite"
+          >
+            Clock In
+          </button>
+          <input
+            type="text"
+            id="quick-note"
+            placeholder="Add a note (optional)"
+            aria-label="Quick Note"
+          />
+        </div>
+      </section>
+
+      <!-- Sessions List Card -->
+      <section
+        id="sessions-card"
+        class="card"
+        aria-labelledby="sessions-heading"
+      >
+        <h2 id="sessions-heading">Sessions</h2>
+        <table
+          id="sessions-table"
+          class="sessions-table"
+          aria-describedby="sessions-desc"
+        >
+          <caption id="sessions-desc" class="sr-only">
+            List of tracked sessions
+          </caption>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Start</th>
+              <th>End</th>
+              <th>Duration</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="sessions-tbody">
+            <!-- Rows Inserted Here -->
+          </tbody>
+        </table>
+        <div class="session-controls">
+          <button type="button" id="add-entry-btn" class="btn">
+            Add Entry
+          </button>
+        </div>
+      </section>
+    </main>
+    <!-- Footer Section -->
+    <footer class="container site-footer" role="contentinfo">
+      <div id="totals" class="totals">
+        <div>Today: <span id="total-today">0h</span></div>
+        <div>Week: <span id="total-week">0h</span></div>
+        <div>Month: <span id="total-month">0h</span></div>
+      </div>
+    </footer>
+    <!-- Modal Placeholders I can place here later -->
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
