@@ -20,6 +20,16 @@
         </div>
         <div class="header-controls">
           <button type="button" id="export-csv" class="btn">Export CSV</button>
+          <select
+            title="Export range"
+            id="export-range"
+            aria-label="Export range"
+          >
+            <option value="all">All</option>
+            <option value="today">Today</option>
+            <option value="week">Week</option>
+            <option value="month">Month</option>
+          </select>
           <button type="button" id="login-btn" class="btn">Login</button>
         </div>
       </div>
@@ -151,6 +161,42 @@
       </div>
     </div>
 
+    <!-- ENTRY MODAL -->
+    <div
+      id="entry-modal"
+      class="modal hidden"
+      aria-hidden="true"
+      aria-labelledby="entry-title"
+    >
+      <div class="modal-content" role="dialog" aria-modal="true">
+        <h3 id="entry-title">Add / Edit Entry</h3>
+        <form id="entry-form">
+          <div class="form-row">
+            <label for="entry-start">Start (ISO / local)</label>
+            <input
+              type="datetime-local"
+              id="entry-start"
+              name="start"
+              required
+            />
+          </div>
+          <div class="form-row">
+            <label for="entry-notes">Notes</label>
+            <input type="text" id="entry-notes" name="notes" />
+          </div>
+          <div class="form-row">
+            <label for="entry-project">Project</label>
+            <select id="entry-project"></select>
+          </div>
+          <div class="form-row form-actions">
+            <button type="submit" id="entry-save" class="btn btn-primary">
+              Save
+            </button>
+            <button type="button" id="entry-cancel" class="btn">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
     <script type="module" src="src/app.js"></script>
   </body>
 </html>
