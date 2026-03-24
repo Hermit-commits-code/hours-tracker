@@ -1,12 +1,12 @@
-// Storage.JS
-// Minimal localStorage based persistence layer for Hours Tracker (Day 2)
-// Replace with Server Backend API later
+// storage.js
+// Minimal localStorage-based persistence layer for the Hours Tracker.
 
 const NAMESPACE = "ht";
 
-const keyUsers = () => `${NAMESPACE}: users`;
+const keyUsers = () => `${NAMESPACE}:users`;
 const keySessions = (userId) => `${NAMESPACE}:sessions:${userId}`;
 const keyCurrentUser = () => `${NAMESPACE}:currentUserId`;
+const keyProjects = () => `${NAMESPACE}:projects`;
 
 function loadJSON(key, fallback) {
 	try {
@@ -56,8 +56,28 @@ export function setCurrentUserId(userId) {
 	}
 }
 
+// Projects API
+export function loadProjects() {
+	return loadJSON(keyProjects(), []);
+}
+
+export function saveProjects(projects) {
+	return saveJSON(keyProjects(), projects);
+}
+
+export function ensureDemoProjects() {
+	const projects = loadProjects();
+	if (projects.length === 0) {
+		const demo = { id: "proj-default", name: "General" };
+		projects.push(demo);
+		saveProjects(projects);
+		return projects;
+	}
+	return projects;
+}
+
 // Utility to ensure at least one demo user exists and set current user.
-// This is for local development / demo only.
+// This is for local development/demo only.
 export function ensureDemoUser() {
 	const users = loadUsers();
 	if (users.length === 0) {
@@ -72,7 +92,7 @@ export function ensureDemoUser() {
 		setCurrentUserId(demo.id);
 		return demo.id;
 	}
-	// Set first user as current if none configured.
+	// set first user as current if none configured
 	let cur = getCurrentUserId();
 	if (!cur) {
 		setCurrentUserId(users[0].id);
@@ -80,6 +100,7 @@ export function ensureDemoUser() {
 	}
 	return cur;
 }
+
 // Small helper for tests/dev to clear keys
 export function clearAllForUser(userId) {
 	if (!userId) return;

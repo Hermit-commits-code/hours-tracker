@@ -1,7 +1,5 @@
 // tests/app.test.js
 // Vitest tests for the pure functions + storage roundtrip.
-// NOTE: this test file sets a simple localStorage mock so it can run in node environment.
-// If you run Vitest with jsdom, you can remove the mock. This works without extra config.
 
 import { describe, it, expect, beforeEach } from "vitest";
 
@@ -26,12 +24,11 @@ function createLocalStorageMock() {
 
 global.localStorage = createLocalStorageMock();
 
-// Import modules after mock is assigned
+// Import after mock
 import * as storage from "../src/storage.js";
 import * as app from "../src/app.js";
 
 beforeEach(() => {
-	// reset storage between tests
 	global.localStorage.clear();
 });
 
@@ -39,11 +36,11 @@ describe("pure helpers", () => {
 	it("calculateSessionDuration returns expected ms for 4.5 hours", () => {
 		const s = "2026-03-24T22:00:00.000Z";
 		const e = "2026-03-25T02:30:00.000Z";
-		expect(app.calculateSessionDuration(s, e)).toBe(16200000); // 4.5 * 3600 * 1000
+		expect(app.calculateSessionDuration(s, e)).toBe(16200000);
 	});
 
 	it("formatDuration formats ms to HH:MM:SS", () => {
-		expect(app.formatDuration(5400000)).toBe("01:30:00"); // 1.5 hours
+		expect(app.formatDuration(5400000)).toBe("01:30:00");
 	});
 
 	it("generateId returns a non-empty string", () => {
@@ -53,7 +50,18 @@ describe("pure helpers", () => {
 	});
 });
 
-describe("storage roundtrip & session flows", () => {
+describe("storage roundtrip & session flows with projects", () => {
+	it("projects save/load roundtrip", () => {
+		const projects = [
+			{ id: "p1", name: "Alpha" },
+			{ id: "p2", name: "Beta" },
+		];
+		storage.saveProjects(projects);
+		const loaded = storage.loadProjects();
+		expect(loaded.length).toBe(2);
+		expect(loaded[0].name).toBe("Alpha");
+	});
+
 	it("save and load sessions persists data", () => {
 		const uid = "u-test";
 		const sessions = [
@@ -72,13 +80,17 @@ describe("storage roundtrip & session flows", () => {
 		expect(loaded[0].id).toBe("s1");
 	});
 
-	it("clockIn prevents double clock-in and clockOut works", () => {
+	it("clockIn prevents double clock-in and clockOut works with project", () => {
 		const uid = "user1";
 		storage.setCurrentUserId(uid);
-		// ensure empty
 		storage.saveSessions(uid, []);
-		const s1 = app.clockIn(uid, "note1");
+		// ensure project exists
+		storage.saveProjects([{ id: "p1", name: "Alpha" }]);
+
+		const s1 = app.clockIn(uid, "note1", "p1");
 		expect(app.hasOpenSession(uid)).toBe(true);
+		expect(s1.projectId).toBe("p1");
+
 		expect(() => app.clockIn(uid)).toThrow();
 		const closed = app.clockOut(uid);
 		expect(closed.end).toBeTruthy();
@@ -91,7 +103,7 @@ describe("storage roundtrip & session flows", () => {
 		expect(() => app.clockOut(uid)).toThrow();
 	});
 
-	it("exportCSV produces header and rows equal to sessions count", () => {
+	it("exportCSV produces header and rows equal to sessions count and includes project columns", () => {
 		const uid = "user3";
 		const sessions = [
 			{
@@ -100,6 +112,7 @@ describe("storage roundtrip & session flows", () => {
 				start: "2026-03-24T08:00:00.000Z",
 				end: "2026-03-24T09:00:00.000Z",
 				notes: "one",
+				projectId: "p-a",
 			},
 			{
 				id: "b",
@@ -107,14 +120,24 @@ describe("storage roundtrip & session flows", () => {
 				start: "2026-03-24T10:00:00.000Z",
 				end: "2026-03-24T12:00:00.000Z",
 				notes: "two",
+				projectId: "p-b",
 			},
 		];
 		storage.saveSessions(uid, sessions);
+		storage.saveProjects([
+			{ id: "p-a", name: "Alpha" },
+			{ id: "p-b", name: "Beta" },
+		]);
+
 		const csv = app.exportCSV(uid);
 		const lines = csv.split("\n").filter(Boolean);
-		expect(lines[0].startsWith("id,start,end,durationSeconds,notes")).toBe(
-			true,
-		);
+		expect(
+			lines[0].startsWith(
+				"id,start,end,durationSeconds,projectId,projectName,notes",
+			),
+		).toBe(true);
 		expect(lines.length).toBe(1 + sessions.length);
+		// check that project name appears in second line
+		expect(lines[1].includes("Alpha")).toBe(true);
 	});
 });

@@ -1,6 +1,5 @@
 // src/app.js
-// Day 2: core pure behaviors (clockIn/clockOut, CSV) + lazy DOM wiring.
-// Top-level code avoids querying `document` so the module is import-safe in Node (Vitest).
+// Node-safe module with project support for Day 2 enhancements.
 
 import {
 	loadSessions,
@@ -9,14 +8,12 @@ import {
 	ensureDemoUser,
 	clearAllForUser,
 	setCurrentUserId,
+	loadProjects,
+	saveProjects,
+	ensureDemoProjects,
 } from "./storage.js";
 
-/* ------------------------
-   Module-scoped variables
-   ------------------------
-   DOM element references are declared here but NOT resolved at module-load time.
-   They are assigned inside init(), which only runs in the browser.
-*/
+/* DOM refs assigned inside init() */
 let $clockToggle;
 let $statusState;
 let $statusSince;
@@ -24,10 +21,10 @@ let $sessionsTbody;
 let $exportCSV;
 let $loginBtn;
 let $quickNote;
+let $projectSelect;
 
 const qs = (sel) =>
 	typeof document !== "undefined" ? document.querySelector(sel) : null;
-
 const $ = (sel) => {
 	const el = qs(sel);
 	if (!el) throw new Error(`Required element not found: ${sel}`);
@@ -35,7 +32,6 @@ const $ = (sel) => {
 };
 
 function init() {
-	// Resolve DOM refs here so importing this module in Node does not throw.
 	$clockToggle = $("#clock-toggle");
 	$statusState = $("#status-state");
 	$statusSince = $("#status-since");
@@ -43,30 +39,32 @@ function init() {
 	$exportCSV = $("#export-csv");
 	$loginBtn = $("#login-btn");
 	$quickNote = $("#quick-note");
+	$projectSelect = $("#project-select");
 
 	$clockToggle.addEventListener("click", handleClockToggle);
 	$exportCSV.addEventListener("click", handleExportCSV);
 	$loginBtn.addEventListener("click", handleLogin);
 
-	// ensure demo user exists during development
+	// ensure demo data
 	ensureDemoUser();
+	ensureDemoProjects();
+	populateProjectSelect(loadProjects());
 
 	renderCurrent();
 }
 
-function renderCurrent() {
-	const uid = getCurrentUserId();
-	const sessions = uid ? loadSessions(uid) : [];
-	const open = hasOpenSession(uid);
-	const sinceISO = open ? sessions.find((s) => s.end === null)?.start : null;
-	// Only call renderStatus/renderSessions when DOM refs exist
-	if (typeof document !== "undefined") {
-		renderStatus({ clockedIn: !!open, sinceISO });
-		renderSessions(sessions);
-	}
+function populateProjectSelect(projects) {
+	if (!$projectSelect) return;
+	$projectSelect.innerHTML = "";
+	projects.forEach((p) => {
+		const opt = document.createElement("option");
+		opt.value = p.id;
+		opt.textContent = p.name;
+		$projectSelect.appendChild(opt);
+	});
 }
 
-/* --------- PURE LOGIC (exported for tests) --------- */
+/* PURE logic (exported) */
 
 export function generateId() {
 	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
@@ -95,7 +93,7 @@ export function hasOpenSession(userId) {
 	return sessions.some((s) => s.end === null);
 }
 
-export function clockIn(userId, note = "") {
+export function clockIn(userId, note = "", projectId = "proj-default") {
 	if (!userId) throw new Error("clockIn: missing userId");
 	if (hasOpenSession(userId)) throw new Error("User already clocked in");
 	const sessions = loadSessions(userId);
@@ -106,6 +104,7 @@ export function clockIn(userId, note = "") {
 		start: now,
 		end: null,
 		notes: note || "",
+		projectId,
 		createdAt: now,
 		updatedAt: now,
 	};
@@ -128,18 +127,32 @@ export function clockOut(userId) {
 
 export function exportCSV(userId) {
 	const sessions = loadSessions(userId);
-	const header = "id,start,end,durationSeconds,notes";
+	const header = "id,start,end,durationSeconds,projectId,projectName,notes";
+	const projects = loadProjects();
 	const rows = sessions.map((s) => {
 		const durationSeconds = s.end
 			? Math.floor(calculateSessionDuration(s.start, s.end) / 1000)
 			: "";
 		const safeNotes = (s.notes || "").replace(/"/g, '""');
-		return `${s.id},${s.start || ""},${s.end || ""},${durationSeconds},"${safeNotes}"`;
+		const proj = projects.find((p) => p.id === s.projectId);
+		const projNameSafe = proj ? proj.name.replace(/"/g, '""') : "";
+		return `${s.id},${s.start || ""},${s.end || ""},${durationSeconds},${s.projectId || ""},"${projNameSafe}","${safeNotes}"`;
 	});
 	return [header, ...rows].join("\n");
 }
 
-/* --------- Small DOM helpers (non-test heavy) --------- */
+/* DOM helpers */
+
+function renderCurrent() {
+	const uid = getCurrentUserId();
+	const sessions = uid ? loadSessions(uid) : [];
+	const open = hasOpenSession(uid);
+	const sinceISO = open ? sessions.find((s) => s.end === null)?.start : null;
+	if (typeof document !== "undefined") {
+		renderStatus({ clockedIn: !!open, sinceISO });
+		renderSessions(sessions);
+	}
+}
 
 function renderStatus({ clockedIn = false, sinceISO = null } = {}) {
 	if (!$statusState || !$statusSince || !$clockToggle) return;
@@ -154,15 +167,18 @@ function renderSessions(sessions) {
 	if (!sessions || sessions.length === 0) {
 		const tr = document.createElement("tr");
 		const td = document.createElement("td");
-		td.setAttribute("colspan", "6");
+		td.setAttribute("colspan", "7");
 		td.textContent = "No sessions yet. Clock in to create your first entry.";
 		tr.appendChild(td);
 		$sessionsTbody.appendChild(tr);
 		return;
 	}
 
+	const projects = loadProjects();
+
 	sessions.forEach((s) => {
 		const tr = document.createElement("tr");
+
 		const dateTd = document.createElement("td");
 		dateTd.textContent = formatLocalDate(s.start);
 		tr.appendChild(dateTd);
@@ -180,6 +196,11 @@ function renderSessions(sessions) {
 			? formatDuration(calculateSessionDuration(s.start, s.end))
 			: "—";
 		tr.appendChild(durTd);
+
+		const projectTd = document.createElement("td");
+		const proj = projects.find((p) => p.id === s.projectId);
+		projectTd.textContent = proj ? proj.name : s.projectId || "";
+		tr.appendChild(projectTd);
 
 		const notesTd = document.createElement("td");
 		notesTd.textContent = s.notes || "";
@@ -231,7 +252,7 @@ function formatLocalTime(iso) {
 	}
 }
 
-/* --------- Event handlers --------- */
+/* Event handlers */
 
 function handleClockToggle() {
 	try {
@@ -241,7 +262,8 @@ function handleClockToggle() {
 			clockOut(uid);
 		} else {
 			const note = $quickNote?.value || "";
-			clockIn(uid, note);
+			const projectId = $projectSelect?.value || "proj-default";
+			clockIn(uid, note, projectId);
 		}
 		renderCurrent();
 	} catch (err) {
@@ -274,7 +296,7 @@ if (typeof document !== "undefined") {
 	document.addEventListener("DOMContentLoaded", init);
 }
 
-// export for debugging in browser console
+// Export some items for console/dev
 if (typeof window !== "undefined") {
 	window.__HT = {
 		clockIn,
@@ -285,5 +307,7 @@ if (typeof window !== "undefined") {
 		formatDuration,
 		clearAllForUser: (uid) => clearAllForUser(uid),
 		setCurrentUserId,
+		loadProjects,
+		saveProjects,
 	};
 }

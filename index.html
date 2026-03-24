@@ -1,14 +1,15 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hours Tracker</title>
-    <link rel="stylesheet" href="style.css" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hours Tracker — Demo</title>
+    <!-- Tiny SVG favicon (data URI) -->
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%230b74ff' width='100' height='100'/%3E%3Ctext x='50' y='65' font-size='60' text-anchor='middle' fill='white'%3EH%3C/text%3E%3C/svg%3E"
     />
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <header class="site-header" role="banner">
@@ -16,10 +17,11 @@
         <h1 id="app-title">Hours Tracker</h1>
         <div class="header-controls">
           <button type="button" id="export-csv" class="btn">Export CSV</button>
-          <button type="button" id="login-btn">Login</button>
+          <button type="button" id="login-btn" class="btn">Login</button>
         </div>
       </div>
     </header>
+
     <main class="container main-grid" role="main">
       <!-- Clock Card -->
       <section
@@ -28,14 +30,14 @@
         aria-labelledby="clock-card-heading"
       >
         <h2 id="clock-card-heading" class="sr-only">Clock Control</h2>
-        <!-- clock status -->
+
         <div class="clock-status" id="clock-status">
           <p id="status-text">
             You are currently <strong id="status-state">clocked out</strong>
           </p>
           <p id="status-since" class="muted"></p>
         </div>
-        <!-- clock actions -->
+
         <div class="clock-actions">
           <button
             type="button"
@@ -46,11 +48,15 @@
             Clock In
           </button>
           <input
-            type="text"
             id="quick-note"
+            type="text"
             placeholder="Add a note (optional)"
-            aria-label="Quick Note"
+            aria-label="Quick note"
           />
+          <!-- Project selector added -->
+          <select id="project-select" aria-label="Project">
+            <option value="proj-default">General</option>
+          </select>
         </div>
       </section>
 
@@ -75,12 +81,13 @@
               <th>Start</th>
               <th>End</th>
               <th>Duration</th>
+              <th>Project</th>
               <th>Notes</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="sessions-tbody">
-            <!-- Rows Inserted Here -->
+            <!-- rows inserted here -->
           </tbody>
         </table>
         <div class="session-controls">
@@ -90,7 +97,7 @@
         </div>
       </section>
     </main>
-    <!-- Footer Section -->
+
     <footer class="container site-footer" role="contentinfo">
       <div id="totals" class="totals">
         <div>Today: <span id="total-today">0h</span></div>
@@ -98,7 +105,9 @@
         <div>Month: <span id="total-month">0h</span></div>
       </div>
     </footer>
-    <!-- Modal Placeholders I can place here later -->
+
+    <div id="modal-root" aria-hidden="true"></div>
+
     <script type="module" src="src/app.js"></script>
   </body>
 </html>
