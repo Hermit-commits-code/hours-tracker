@@ -3,162 +3,191 @@
 A lightweight Hours Tracker web app (vanilla HTML/CSS/JS) — demo-first implementation.
 Purpose: learn and demonstrate core frontend engineering practices (modular code, testable pure functions, local persistence) before migrating to TypeScript + Next.js and a Go backend.
 
-Status
-- Current: Day 1 UI scaffold complete (responsive "bento" layout, wired button handlers).
-- Next: Day 2 — implement storage + core logic (clockIn/clockOut, duration calc), add unit tests.
+---
 
-Table of contents
-- Features
-- Built with
-- Project structure
-- Getting started
-- Development commands
-- Testing
-- Data model & localStorage schema
-- Usage
-- Acceptance criteria (Day 1)
-- Roadmap & next steps
-- Security & production checklist
-- Contributing
-- License
-- Contact
+## Status (summary)
+- Current: Day 4 complete — UI + storage + projects + demo auth + totals + live timer + CSV export (local demo).
+- Tests: All Vitest unit tests passing locally (core pure functions + totals + auth + storage).
+- Next: Day 5 — manual edit/delete entries + CSV filters + accessibility polish + more tests.
 
-Features (MVP)
+---
+
+## Progress Log (concise daily notes)
+
+Day 1 — UI scaffold & wiring
+- Built mobile-first "bento" layout: header, clock card, sessions table, totals footer.
+- Added `index.html`, `styles.css`, initial `src/app.js` wiring (DOM-ready init).
+- Added `.biome.json` and VS Code workspace suggestions.
+- Acceptance: UI displays, responsive, buttons wired to demo handlers.
+
+Day 2 — Storage & core logic + tests
+- Implemented `src/storage.js`: localStorage API (users, sessions, projects).
+- Implemented pure core functions in `src/app.js`: `clockIn`, `clockOut`, `calculateSessionDuration`, `formatDuration`, `exportCSV`.
+- Introduced Vitest tests for core functions and storage roundtrip.
+- Ensured module is Node-import-safe (no top-level DOM queries) so tests can import app logic.
+- Acceptance: unit tests pass for core logic; clock in/out persists to localStorage.
+
+Day 3 — Demo auth & current-user UI
+- Added demo register/login/logout (client-side demo mode) and auth modal.
+- Added header current-user display and login/logout toggle.
+- Storage: `createUser`, `authenticateUser`, `setCurrentUserId` (demo pattern, base64).
+- Acceptance: registration/login/logout work in browser; header updates; tests cover auth functions.
+
+Day 4 — Projects, totals, live timer & modal Escape key
+- Added project selector and project persistence (`proj-default`).
+- Sessions include `projectId`; CSV now includes `projectId` + `projectName`.
+- Implemented `calculateTotals(sessions)` returning `{ today, week, month }` (ms).
+  - Day = calendar day
+  - Week = last 7 days including reference day
+  - Month = calendar month
+- Live timer: when clocked in, `#status-since` displays "since <local time> — HH:MM:SS" updating every second; timer resumes after reload.
+- Auth modal closable via `Escape` key.
+- Acceptance: all Vitest tests pass (including totals test). Browser checks for clock in/out, totals, CSV verified.
+
+---
+
+## Features (MVP)
 - Demo register/login (client-side, demo-only)
 - Clock In / Clock Out actions
-- Session list with date, start, end, duration, notes
-- Manual add/edit/delete entries (planned)
-- Export CSV (planned)
+- Session list with date, start, end, duration, project, notes
+- Manual add/edit/delete entries (delete implemented)
+- Export CSV (includes project name)
 - Mobile-first responsive "bento" layout
+- Totals: Today / Week / Month
+- Live elapsed timer while clocked in
+- Demo data helpers (ensureDemoUser, ensureDemoProjects)
 
-Built with
-- HTML5, CSS (mobile-first), plain JavaScript (ES modules)
-- Biome.js for formatting/linting (config: .biome.json)
-- Vitest for unit testing (pure functions)
+---
+
+## Built with
+- HTML5, CSS (mobile-first), JavaScript (ES modules)
+- Biome.js for formatting/linting
+- Vitest for unit testing
 - Live Server (or any static server) for local development
 
-Project structure
-- index.html — app UI
+---
+
+## Project structure (current)
+- index.html — app UI + modal markup
 - styles.css — styles (mobile-first, desktop breakpoint at 880px)
 - src/
-  - app.js — UI wiring & pure helper stubs (incremental logic)
-  - (future) storage.js — localStorage layer
-  - (future) ui.js — DOM helpers (optional)
+  - app.js — core behavior + UI wiring (Node-import safe)
+  - storage.js — localStorage persistence and demo auth helpers
 - tests/
-  - app.test.js — unit tests (Vitest)
+  - app.test.js — Vitest tests (pure functions + storage + auth + totals)
 - .biome.json — Biome config
 - package.json — scripts & dev dependencies
 - README.md — this file
 
-Getting started (quick)
+---
+
+## Getting started (quick)
 Prerequisites
 - Node.js >= 18 (for dev tools), pnpm or npm
 - Optional: Live Server VS Code extension, or any static file server
 
-Install (choose one)
-- Using pnpm:
-  pnpm install
-- Using npm:
-  npm install
+Install
+- pnpm: `pnpm install`
+- npm: `npm install`
 
 Run (dev)
-- Start a static dev server (option A: Live Server ext; option B: local tool)
-  - Option A: Right-click `index.html` -> Open with Live Server
-  - Option B: Install live-server and run:
-    npx live-server --port=5173
+- Option A: Live Server extension — right-click `index.html` -> Open with Live Server
+- Option B: CLI static server:
+  - `npx live-server --port=5173`
 
-Code formatting / lint (Biome)
-- Check:
-  npx biome check
-- Format:
-  npx biome format
+Format / lint
+- Check: `npx biome check`
+- Format: `npx biome format`
 
-Development commands (package.json)
-- Start (if configured):
-  npm run start
-- Test:
-  npm run test
-- Format:
-  npm run format  (if you add this to scripts)
-
-Testing
-- Uses Vitest for pure function unit tests.
-- Run tests:
-  npx vitest
-- Tests focus on:
-  - calculateSessionDuration(startISO, endISO)
-  - formatDuration(ms)
-  - prevention of double clock-in
-  - exportCSV formatting
-  - storage roundtrip (save + load)
-
-Data model & localStorage schema (client-side demo)
-- Keys / shapes used by the demo:
-  - Users: key `ht:users` -> JSON array of:
-    { id, username, passwordHash, createdAt }
-  - Current user: key `ht:currentUserId` -> user id string
-  - Sessions per user: key `ht:sessions:{userId}` -> JSON array of sessions:
-    { id, userId, start: ISO(UTC), end: ISO|null, notes, createdAt, updatedAt }
-
-Important timezone rule
-- Store timestamps as UTC ISO strings (Date.toISOString()).
-- Display using local methods: new Date(iso).toLocaleString() / toLocaleTimeString().
-- Calculate durations using Date.parse(ISO) → milliseconds (DST-safe).
-
-Usage (UI walkthrough)
-- Register (demo) then Login (demo) — sets current user in localStorage.
-- Click Clock In: creates a session with start=now (ISO) and end=null.
-- Click Clock Out: closes the last open session with end=now.
-- Session list displays date, start, end, duration (hh:mm:ss), notes and actions (Edit/Delete).
-- Export CSV will create CSV with header: id,start,end,durationSeconds,notes (planned).
-
-Day 1 Acceptance Criteria (verify before moving on)
-- index.html displays header, clock card, sessions table, and footer totals.
-- Responsive behavior: stacked on mobile, two-column at >=880px.
-- src/app.js wired: clicking Clock In, Export CSV, Login shows demo alerts and console logs (no runtime errors).
-- .biome.json exists and is recognized by Biome.
-- All files committed to repo with clear commit messages.
-
-Roadmap & next steps (short)
-- Day 2: Implement storage.js and core pure functions (clockIn/clockOut, calculateSessionDuration, formatDuration). Add Vitest tests for these functions.
-- Day 3: Demo auth persistence + UI login/register.
-- Day 4: Integrate DOM with core logic, render sessions, add totals.
-- Day 5: Manual edit/delete + CSV export + more tests.
-- Weeks 3–4: Migrate to TypeScript and prepare Next.js frontend scaffolding.
-- Weeks 5–8: Build Go backend (API, auth, Postgres), replace localStorage persistence.
-- Weeks 9–12: Deploy, CI, portfolio case study, interview prep.
-
-Security & production checklist (for migration)
-- Replace demo client-side auth with server-side auth + secure cookies or JWTs.
-- Hash passwords with bcrypt (or Argon2) on server.
-- Enable HTTPS and secure cookie flags.
-- Implement CSRF protection for cookie-based auth.
-- Validate and sanitize all user inputs server-side.
-- Use prepared statements (sqlc/pgx) or safe ORM to avoid SQL injection.
-- Do not store secrets in repo. Use environment variables and secrets manager.
-
-Contribution
-- Preferred workflow:
-  - Create a branch per task: `feature/<short-desc>`
-  - Keep PRs small (2–4 hour sized chunks).
-  - Run Biome format and tests locally before submitting PR.
-- To contribute:
-  - Fork repo → implement feature → open PR with description, screenshots, tests.
-
-License
-- MIT License (or choose your preferred license).
-
-Contact
-- Repo owner: Hermit-commits-code (your GitHub profile)
-- For questions, open an issue in this repository.
-
-Appendix: Useful commands
-- Quick server:
-  npx live-server --port=5173
-- Format all files:
-  npx biome format
-- Run all tests:
-  npx vitest
+Tests
+- Run unit tests: `npx vitest --run`
+- Tests included cover:
+  - duration calculations
+  - totals calculation
+  - clock-in/out flows
+  - auth create/authenticate
+  - storage roundtrip
+  - CSV contents (including project columns)
 
 ---
 
+## Data model & localStorage schema (client-side demo)
+- Users: key `ht:users` -> JSON array of { id, username, passwordHash, createdAt }
+- Current user: key `ht:currentUserId` -> user id string
+- Sessions: key `ht:sessions:{userId}` -> JSON array of sessions:
+  { id, userId, start: ISO(UTC), end: ISO|null, notes, projectId, createdAt, updatedAt }
+- Projects: key `ht:projects` -> JSON array of { id, name }
+
+Timezone rule
+- Store timestamps as UTC ISO strings via `new Date().toISOString()`.
+- Display using local methods: `new Date(iso).toLocaleString()` or `toLocaleTimeString()`.
+- Duration calculations use `Date.parse(ISO)` (ms) — DST-proof by using absolute times.
+
+---
+
+## Usage (UI walkthrough)
+- Register or use demo account (demo/demo).
+- Select a project in the project dropdown (default "General").
+- Enter an optional quick note.
+- Click Clock In: session created with start time; header shows "clocked in" and live elapsed timer.
+- Click Clock Out: session receives end time; session row shows duration and footer totals update.
+- Export CSV: downloads CSV with header:
+  `id,start,end,durationSeconds,projectId,projectName,notes`
+
+---
+
+## Acceptance criteria (current)
+- UI: responsive, accessible header + bento layout.
+- Core logic: `clockIn` / `clockOut` persist to per-user sessions.
+- Projects: sessions record `projectId` and CSV contains project name.
+- Totals: Today / Week / Month calculations correct (unit-tested).
+- Live timer: updates every second while clocked in and resumes after reload.
+- Tests: `npx vitest --run` passes locally.
+
+---
+
+## Day 5 (next steps — concise)
+Primary goals:
+- Manual edit entry modal + update logic and tests.
+- CSV enhancements: export range filters (today/week/month) and ensure proper escaping.
+- Accessibility: keyboard focus trap in modal, ARIA roles for dynamic elements.
+- Add more unit tests and a simple Playwright smoke E2E for basic user flow.
+
+Planned PR-sized tasks (2–4h each):
+1. Implement Edit Entry modal (UI + save) — 4h
+2. CSV export range filters (UI + tests) — 3h
+3. Modal focus trap & keyboard accessibility — 3h
+4. Playwright smoke test for registration -> clock in/out -> export — 4h
+
+---
+
+## Security & production migration checklist
+- Replace demo client-side auth with server-side hashed passwords (bcrypt/Argon2).
+- Use secure cookies or properly signed JWTs with refresh tokens.
+- CSRF protection if using cookies.
+- Input validation & sanitization server-side.
+- Use prepared statements / sqlc for DB queries.
+- Store secrets in environment variables or secret manager — never in repo.
+
+---
+
+## Contributing
+- Branch per task: `feature/<short-desc>`
+- Keep PRs small (2–4 hour chunks)
+- Run Biome format + tests locally before PR
+- Provide screenshots and test notes in PR description
+
+---
+
+## Quick commands
+- Start Dev Server: `npx live-server --port=5173`
+- Run Tests: `npx vitest --run`
+- Format: `npx biome format`
+
+---
+
+## Contact
+- Repo owner: Hermit-commits-code
+- For questions: open an issue in your repo
+
+---

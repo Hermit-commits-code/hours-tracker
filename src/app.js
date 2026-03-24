@@ -1,5 +1,5 @@
 // src/app.js
-// Node-safe module with demo auth UI + core features.
+// Node-safe module with demo auth + core features + totals and live timer.
 
 import {
 	loadSessions,
@@ -43,7 +43,11 @@ const $ = (sel) => {
 };
 
 let authMode = "login"; // or 'register'
+let liveTimerId = null;
 
+/* ---------------------------
+   Init and event listeners
+   --------------------------- */
 function init() {
 	$clockToggle = $("#clock-toggle");
 	$statusState = $("#status-state");
@@ -71,6 +75,15 @@ function init() {
 	$authToggle.addEventListener("click", handleAuthToggle);
 	$authClose.addEventListener("click", closeAuthModal);
 
+	// Close modal on Escape
+	document.addEventListener("keydown", (ev) => {
+		if (ev.key === "Escape") {
+			if ($authModal && !$authModal.classList.contains("hidden")) {
+				closeAuthModal();
+			}
+		}
+	});
+
 	// ensure demo data
 	ensureDemoUser();
 	ensureDemoProjects();
@@ -90,7 +103,9 @@ function populateProjectSelect(projects) {
 	});
 }
 
-/* PURE logic (exported) */
+/* ---------------------------
+   Pure helpers (exported)
+   --------------------------- */
 
 export function generateId() {
 	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
@@ -112,6 +127,73 @@ export function formatDuration(ms) {
 function pad(n) {
 	return n.toString().padStart(2, "0");
 }
+
+// Calculate totals: returns { today: ms, week: ms, month: ms }
+// week = last 7 days including reference day.
+export function calculateTotals(
+	sessions,
+	referenceISO = new Date().toISOString(),
+) {
+	const ref = new Date(referenceISO);
+	const refStartOfDay = startOfDay(ref);
+	const refStartOfWeek = startOfDay(
+		new Date(ref.getTime() - 6 * 24 * 3600 * 1000),
+	);
+	const refStartOfMonth = startOfMonth(ref);
+
+	let totalDay = 0;
+	let totalWeek = 0;
+	let totalMonth = 0;
+
+	sessions.forEach((s) => {
+		const sStart = Date.parse(s.start);
+		const sEnd = s.end ? Date.parse(s.end) : Date.now();
+		if (!(sEnd > sStart)) return;
+
+		const overlap = (aStart, aEnd) => {
+			const start = Math.max(sStart, aStart);
+			const end = Math.min(sEnd, aEnd);
+			return Math.max(0, end - start);
+		};
+
+		totalDay += overlap(
+			refStartOfDay.getTime(),
+			refStartOfDay.getTime() + 24 * 3600 * 1000,
+		);
+		totalWeek += overlap(
+			refStartOfWeek.getTime(),
+			ref.getTime() + 24 * 3600 * 1000,
+		);
+		totalMonth += overlap(
+			refStartOfMonth.getTime(),
+			startOfNextMonth(ref).getTime(),
+		);
+	});
+
+	return { today: totalDay, week: totalWeek, month: totalMonth };
+}
+
+/* Date helpers */
+function startOfDay(d) {
+	const nd = new Date(d);
+	nd.setHours(0, 0, 0, 0);
+	return nd;
+}
+function startOfMonth(d) {
+	const nd = new Date(d);
+	nd.setDate(1);
+	nd.setHours(0, 0, 0, 0);
+	return nd;
+}
+function startOfNextMonth(d) {
+	const nd = startOfMonth(d);
+	nd.setMonth(nd.getMonth() + 1);
+	return nd;
+}
+
+/* ---------------------------
+   Core session ops
+   --------------------------- */
 
 export function hasOpenSession(userId) {
 	if (!userId) return false;
@@ -167,45 +249,31 @@ export function exportCSV(userId) {
 	return [header, ...rows].join("\n");
 }
 
-/* Authentication helpers (demo-only) */
-
-export function registerUser(username, password) {
-	// delegate to storage.createUser; throws on duplicate
-	const user = createUser({ username, password });
-	setCurrentUserId(user.id);
-	return user;
-}
-
-export function loginUser(username, password) {
-	const found = authenticateUser(username, password);
-	if (!found) throw new Error("Invalid username or password");
-	setCurrentUserId(found.id);
-	return found;
-}
-
-export function logoutUser() {
-	setCurrentUserId(null);
-}
-
-/* DOM helpers */
+/* ---------------------------
+   DOM rendering & timer
+   --------------------------- */
 
 function renderCurrent() {
 	const uid = getCurrentUserId();
-	if (typeof document !== "undefined") {
-		// header current user
-		if ($currentUserSpan) {
-			const user = uid ? findUserById(uid) : null;
-			$currentUserSpan.textContent = user ? `Signed in: ${user.username}` : "";
-		}
-		// change login button caption when logged in
-		if ($loginBtn) $loginBtn.textContent = uid ? "Logout" : "Login";
 
-		const sessions = uid ? loadSessions(uid) : [];
-		const open = hasOpenSession(uid);
-		const sinceISO = open ? sessions.find((s) => s.end === null)?.start : null;
-		renderStatus({ clockedIn: !!open, sinceISO });
-		renderSessions(sessions);
+	if ($currentUserSpan) {
+		const user = uid ? findUserById(uid) : null;
+		$currentUserSpan.textContent = user ? `Signed in: ${user.username}` : "";
 	}
+	if ($loginBtn) $loginBtn.textContent = uid ? "Logout" : "Login";
+
+	const sessions = uid ? loadSessions(uid) : [];
+	const open = hasOpenSession(uid);
+	const sinceISO = open ? sessions.find((s) => s.end === null)?.start : null;
+
+	renderStatus({ clockedIn: !!open, sinceISO });
+	renderSessions(sessions);
+
+	const totals = calculateTotals(sessions);
+	updateTotalsDisplay(totals);
+
+	if (open && sinceISO) startLiveTimer(sinceISO);
+	else stopLiveTimer();
 }
 
 function renderStatus({ clockedIn = false, sinceISO = null } = {}) {
@@ -218,6 +286,7 @@ function renderStatus({ clockedIn = false, sinceISO = null } = {}) {
 function renderSessions(sessions) {
 	if (!$sessionsTbody) return;
 	$sessionsTbody.innerHTML = "";
+
 	if (!sessions || sessions.length === 0) {
 		const tr = document.createElement("tr");
 		const td = document.createElement("td");
@@ -261,12 +330,6 @@ function renderSessions(sessions) {
 		tr.appendChild(notesTd);
 
 		const actionsTd = document.createElement("td");
-		const editBtn = document.createElement("button");
-		editBtn.className = "btn";
-		editBtn.textContent = "Edit";
-		editBtn.addEventListener("click", () =>
-			alert(`Edit ${s.id} (not implemented)`),
-		);
 		const delBtn = document.createElement("button");
 		delBtn.className = "btn";
 		delBtn.textContent = "Delete";
@@ -277,13 +340,50 @@ function renderSessions(sessions) {
 			saveSessions(uid, filtered);
 			renderCurrent();
 		});
-		actionsTd.append(editBtn, delBtn);
+		actionsTd.append(delBtn);
 		tr.appendChild(actionsTd);
 
 		$sessionsTbody.appendChild(tr);
 	});
 }
 
+function updateTotalsDisplay({ today = 0, week = 0, month = 0 } = {}) {
+	const tToday = qs("#total-today");
+	const tWeek = qs("#total-week");
+	const tMonth = qs("#total-month");
+	if (tToday) tToday.textContent = msToHoursString(today);
+	if (tWeek) tWeek.textContent = msToHoursString(week);
+	if (tMonth) tMonth.textContent = msToHoursString(month);
+}
+
+function msToHoursString(ms) {
+	const hours = ms / (1000 * 60 * 60);
+	if (hours < 1) return `${Math.round(hours * 60)}m`;
+	return `${hours.toFixed(2).replace(/\.00$/, "")}h`;
+}
+
+/* Live timer */
+function startLiveTimer(startISO) {
+	stopLiveTimer();
+	if (!$statusSince) return;
+
+	const update = () => {
+		const elapsed = Date.now() - Date.parse(startISO);
+		$statusSince.textContent = `since ${formatLocal(startISO)} — ${formatDuration(elapsed)}`;
+	};
+
+	update();
+	liveTimerId = setInterval(update, 1000);
+}
+
+function stopLiveTimer() {
+	if (liveTimerId) {
+		clearInterval(liveTimerId);
+		liveTimerId = null;
+	}
+}
+
+/* Formatting helpers */
 function formatLocal(iso) {
 	try {
 		return new Date(iso).toLocaleString();
@@ -306,12 +406,15 @@ function formatLocalTime(iso) {
 	}
 }
 
-/* Event handlers */
+/* ---------------------------
+   Event handlers & auth
+   --------------------------- */
 
 function handleClockToggle() {
 	try {
 		let uid = getCurrentUserId();
 		if (!uid) uid = ensureDemoUser();
+
 		if (hasOpenSession(uid)) {
 			clockOut(uid);
 		} else {
@@ -319,6 +422,7 @@ function handleClockToggle() {
 			const projectId = $projectSelect?.value || "proj-default";
 			clockIn(uid, note, projectId);
 		}
+
 		renderCurrent();
 	} catch (err) {
 		console.error(err);
@@ -344,16 +448,12 @@ function handleExportCSV() {
 function handleLogin() {
 	const uid = getCurrentUserId();
 	if (uid) {
-		// currently signed in -> logout
 		logoutUser();
 		renderCurrent();
 		return;
 	}
-	// open auth modal
 	openAuthModal("login");
 }
-
-/* Auth modal helpers */
 
 function openAuthModal(mode = "login") {
 	authMode = mode;
@@ -385,34 +485,47 @@ function handleAuthSubmit(e) {
 	const uname = $authUsername.value.trim();
 	const pass = $authPassword.value || "";
 	if (!uname || !pass) return alert("Username and password required (demo)");
+
 	try {
 		if (authMode === "register") {
 			registerUser(uname, pass);
-			closeAuthModal();
-			renderCurrent();
 		} else {
 			loginUser(uname, pass);
-			closeAuthModal();
-			renderCurrent();
 		}
+		closeAuthModal();
+		renderCurrent();
 	} catch (err) {
 		alert(err.message);
 	}
 }
 
-/* Bootstrap only in browser */
+export function registerUser(username, password) {
+	const user = createUser({ username, password });
+	setCurrentUserId(user.id);
+	return user;
+}
+export function loginUser(username, password) {
+	const found = authenticateUser(username, password);
+	if (!found) throw new Error("Invalid username or password");
+	setCurrentUserId(found.id);
+	return found;
+}
+export function logoutUser() {
+	setCurrentUserId(null);
+}
+
+/* Bootstrap */
 if (typeof document !== "undefined") {
 	document.addEventListener("DOMContentLoaded", init);
 }
 
-// Export some items for console/dev
+/* Dev exports */
 if (typeof window !== "undefined") {
 	window.__HT = {
 		clockIn,
 		clockOut,
 		exportCSV,
-		generateId,
-		calculateSessionDuration,
+		calculateTotals,
 		formatDuration,
 		clearAllForUser: (uid) => clearAllForUser(uid),
 		setCurrentUserId,

@@ -151,4 +151,32 @@ describe("storage roundtrip & session flows with projects and auth", () => {
 		// check that project name appears in second line
 		expect(lines[1].includes("Alpha")).toBe(true);
 	});
+	describe("totals calculation", () => {
+		it("calculates today/week/month totals correctly", () => {
+			const ref = "2026-03-25T12:00:00.000Z";
+
+			const sessions = [
+				{
+					id: "a",
+					start: "2026-03-25T08:00:00.000Z",
+					end: "2026-03-25T10:00:00.000Z",
+				}, // 2h today
+				{
+					id: "b",
+					start: "2026-03-22T09:00:00.000Z",
+					end: "2026-03-22T10:00:00.000Z",
+				}, // 1h in last 7 days
+				{
+					id: "c",
+					start: "2026-03-05T09:00:00.000Z",
+					end: "2026-03-05T13:00:00.000Z",
+				}, // 4h this month
+			];
+
+			const totals = app.calculateTotals(sessions, ref);
+			expect(totals.today).toBe(2 * 3600 * 1000);
+			expect(totals.week).toBe((2 + 1) * 3600 * 1000);
+			expect(totals.month).toBe((2 + 1 + 4) * 3600 * 1000);
+		});
+	});
 });
