@@ -1,5 +1,5 @@
 // src/app.js
-// Node-safe module with project support for Day 2 enhancements.
+// Node-safe module with demo auth UI + core features.
 
 import {
 	loadSessions,
@@ -11,6 +11,9 @@ import {
 	loadProjects,
 	saveProjects,
 	ensureDemoProjects,
+	createUser,
+	authenticateUser,
+	findUserById,
 } from "./storage.js";
 
 /* DOM refs assigned inside init() */
@@ -22,6 +25,14 @@ let $exportCSV;
 let $loginBtn;
 let $quickNote;
 let $projectSelect;
+let $currentUserSpan;
+let $authModal;
+let $authForm;
+let $authUsername;
+let $authPassword;
+let $authSubmit;
+let $authToggle;
+let $authClose;
 
 const qs = (sel) =>
 	typeof document !== "undefined" ? document.querySelector(sel) : null;
@@ -30,6 +41,8 @@ const $ = (sel) => {
 	if (!el) throw new Error(`Required element not found: ${sel}`);
 	return el;
 };
+
+let authMode = "login"; // or 'register'
 
 function init() {
 	$clockToggle = $("#clock-toggle");
@@ -40,10 +53,23 @@ function init() {
 	$loginBtn = $("#login-btn");
 	$quickNote = $("#quick-note");
 	$projectSelect = $("#project-select");
+	$currentUserSpan = $("#current-user");
+
+	$authModal = $("#auth-modal");
+	$authForm = $("#auth-form");
+	$authUsername = $("#auth-username");
+	$authPassword = $("#auth-password");
+	$authSubmit = $("#auth-submit");
+	$authToggle = $("#auth-toggle");
+	$authClose = $("#auth-close");
 
 	$clockToggle.addEventListener("click", handleClockToggle);
 	$exportCSV.addEventListener("click", handleExportCSV);
 	$loginBtn.addEventListener("click", handleLogin);
+
+	$authForm.addEventListener("submit", handleAuthSubmit);
+	$authToggle.addEventListener("click", handleAuthToggle);
+	$authClose.addEventListener("click", closeAuthModal);
 
 	// ensure demo data
 	ensureDemoUser();
@@ -141,14 +167,42 @@ export function exportCSV(userId) {
 	return [header, ...rows].join("\n");
 }
 
+/* Authentication helpers (demo-only) */
+
+export function registerUser(username, password) {
+	// delegate to storage.createUser; throws on duplicate
+	const user = createUser({ username, password });
+	setCurrentUserId(user.id);
+	return user;
+}
+
+export function loginUser(username, password) {
+	const found = authenticateUser(username, password);
+	if (!found) throw new Error("Invalid username or password");
+	setCurrentUserId(found.id);
+	return found;
+}
+
+export function logoutUser() {
+	setCurrentUserId(null);
+}
+
 /* DOM helpers */
 
 function renderCurrent() {
 	const uid = getCurrentUserId();
-	const sessions = uid ? loadSessions(uid) : [];
-	const open = hasOpenSession(uid);
-	const sinceISO = open ? sessions.find((s) => s.end === null)?.start : null;
 	if (typeof document !== "undefined") {
+		// header current user
+		if ($currentUserSpan) {
+			const user = uid ? findUserById(uid) : null;
+			$currentUserSpan.textContent = user ? `Signed in: ${user.username}` : "";
+		}
+		// change login button caption when logged in
+		if ($loginBtn) $loginBtn.textContent = uid ? "Logout" : "Login";
+
+		const sessions = uid ? loadSessions(uid) : [];
+		const open = hasOpenSession(uid);
+		const sinceISO = open ? sessions.find((s) => s.end === null)?.start : null;
 		renderStatus({ clockedIn: !!open, sinceISO });
 		renderSessions(sessions);
 	}
@@ -288,7 +342,62 @@ function handleExportCSV() {
 }
 
 function handleLogin() {
-	alert("Demo login will be implemented on Day 3.");
+	const uid = getCurrentUserId();
+	if (uid) {
+		// currently signed in -> logout
+		logoutUser();
+		renderCurrent();
+		return;
+	}
+	// open auth modal
+	openAuthModal("login");
+}
+
+/* Auth modal helpers */
+
+function openAuthModal(mode = "login") {
+	authMode = mode;
+	if ($authModal) {
+		$authModal.classList.remove("hidden");
+		$authModal.setAttribute("aria-hidden", "false");
+		$authSubmit.textContent = mode === "login" ? "Sign In" : "Register";
+		$authToggle.textContent =
+			mode === "login" ? "Register" : "Use existing account";
+		$authUsername.value = "";
+		$authPassword.value = "";
+		$authUsername.focus();
+	}
+}
+
+function closeAuthModal() {
+	if ($authModal) {
+		$authModal.classList.add("hidden");
+		$authModal.setAttribute("aria-hidden", "true");
+	}
+}
+
+function handleAuthToggle() {
+	openAuthModal(authMode === "login" ? "register" : "login");
+}
+
+function handleAuthSubmit(e) {
+	e.preventDefault();
+	const uname = $authUsername.value.trim();
+	const pass = $authPassword.value || "";
+	if (!uname || !pass) return alert("Username and password required (demo)");
+	try {
+		if (authMode === "register") {
+			registerUser(uname, pass);
+			closeAuthModal();
+			renderCurrent();
+		} else {
+			loginUser(uname, pass);
+			closeAuthModal();
+			renderCurrent();
+		}
+	} catch (err) {
+		alert(err.message);
+	}
 }
 
 /* Bootstrap only in browser */
@@ -309,5 +418,8 @@ if (typeof window !== "undefined") {
 		setCurrentUserId,
 		loadProjects,
 		saveProjects,
+		registerUser,
+		loginUser,
+		logoutUser,
 	};
 }

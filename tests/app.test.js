@@ -50,7 +50,7 @@ describe("pure helpers", () => {
 	});
 });
 
-describe("storage roundtrip & session flows with projects", () => {
+describe("storage roundtrip & session flows with projects and auth", () => {
 	it("projects save/load roundtrip", () => {
 		const projects = [
 			{ id: "p1", name: "Alpha" },
@@ -60,6 +60,17 @@ describe("storage roundtrip & session flows with projects", () => {
 		const loaded = storage.loadProjects();
 		expect(loaded.length).toBe(2);
 		expect(loaded[0].name).toBe("Alpha");
+	});
+
+	it("create and authenticate user (demo)", () => {
+		const user = storage.createUser({ username: "alice", password: "secret" });
+		expect(user.username).toBe("alice");
+		const auth = storage.authenticateUser("alice", "secret");
+		expect(auth).not.toBeNull();
+		expect(auth.username).toBe("alice");
+		// wrong password
+		const bad = storage.authenticateUser("alice", "wrong");
+		expect(bad).toBeNull();
 	});
 
 	it("save and load sessions persists data", () => {

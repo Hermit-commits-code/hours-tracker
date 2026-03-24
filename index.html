@@ -107,6 +107,46 @@
     </footer>
 
     <div id="modal-root" aria-hidden="true"></div>
+    <!-- AUTH MODAL -->
+    <div id="auth-modal" class="modal hidden" aria-hidden="true">
+      <div
+        class="modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-title"
+      >
+        <h3 id="auth-title">Sign In</h3>
+        <form id="auth-form">
+          <div class="form-row">
+            <label for="auth-username">Username</label>
+            <input
+              type="text"
+              name="username"
+              id="auth-username"
+              autocomplete="username"
+              required
+            />
+          </div>
+          <div class="form-row">
+            <label for="auth-password">Password</label>
+            <input
+              type="password"
+              name="password"
+              id="auth-password"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+          <div class="form-row form-actions">
+            <button type="submit" id="auth-submit" class="btn btn-primary">
+              Sign In
+            </button>
+            <button type="button" id="auth-toggle" class="btn">Register</button>
+            <button type="button" id="auth-close" class="btn">Close</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <script type="module" src="src/app.js"></script>
   </body>

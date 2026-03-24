@@ -56,6 +56,55 @@ body {
 	margin-left: 0.5rem;
 }
 
+/* Modal Styles */
+.modal.hidden {
+	display: none;
+}
+
+.modal {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.3);
+	z-index: 2000;
+}
+
+.modal-content {
+	width: 100%;
+	max-width: 420px;
+	background: #fff;
+	padding: 1rem;
+	border-radius: 8px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+
+.form-row {
+	margin-bottom: 0.75rem;
+	display: flex;
+	flex-direction: column;
+}
+
+.form-row label {
+	font-size: 0.85rem;
+	margin-bottom: 0.25rem;
+	color: var(--muted);
+}
+
+.form-row input {
+	padding: 0.5rem;
+	border-radius: 6px;
+	border: 1px solid #e5e7eb;
+}
+
+.form-actions {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+	justify-content: flex-end;
+}
+
 /* Main Grid Stacked on mobile */
 .main-grid {
 	display: grid;
