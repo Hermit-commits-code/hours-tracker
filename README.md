@@ -70,6 +70,8 @@ Day 4 — Projects, totals, live timer & modal Escape key
 ## Project structure (current)
 - index.html — app UI + modal markup
 - styles.css — styles (mobile-first, desktop breakpoint at 880px)
+- docs/
+  - case_study_hours_tracker.md — Case Study
 - src/
   - app.js — core behavior + UI wiring (Node-import safe)
   - storage.js — localStorage persistence and demo auth helpers
