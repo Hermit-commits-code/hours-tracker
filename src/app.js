@@ -1,5 +1,6 @@
 // src/app.js
-// Node-safe module with demo auth + core features + totals and live timer.
+// Full app (Node-import safe) with demo auth, projects, totals, live timer,
+// add/update entry modal, export range, and tests-friendly exports.
 
 import {
 	loadSessions,
@@ -16,7 +17,7 @@ import {
 	findUserById,
 } from "./storage.js";
 
-/* DOM refs assigned inside init() */
+/* DOM refs (resolved in init) */
 let $clockToggle;
 let $statusState;
 let $statusSince;
@@ -34,6 +35,18 @@ let $authSubmit;
 let $authToggle;
 let $authClose;
 
+let $entryModal,
+	$entryForm,
+	$entryStart,
+	$entryEnd,
+	$entryNotes,
+	$entryProject,
+	$entrySave,
+	$entryCancel;
+let authMode = "login"; // or 'register'
+let liveTimerId = null;
+let entryEditingId = null;
+
 const qs = (sel) =>
 	typeof document !== "undefined" ? document.querySelector(sel) : null;
 const $ = (sel) => {
@@ -42,11 +55,8 @@ const $ = (sel) => {
 	return el;
 };
 
-let authMode = "login"; // or 'register'
-let liveTimerId = null;
-
 /* ---------------------------
-   Init and event listeners
+   Init
    --------------------------- */
 function init() {
 	$clockToggle = $("#clock-toggle");
@@ -67,6 +77,15 @@ function init() {
 	$authToggle = $("#auth-toggle");
 	$authClose = $("#auth-close");
 
+	$entryModal = $("#entry-modal");
+	$entryForm = $("#entry-form");
+	$entryStart = $("#entry-start");
+	$entryEnd = $("#entry-end");
+	$entryNotes = $("#entry-notes");
+	$entryProject = $("#entry-project");
+	$entrySave = $("#entry-save");
+	$entryCancel = $("#entry-cancel");
+
 	$clockToggle.addEventListener("click", handleClockToggle);
 	$exportCSV.addEventListener("click", handleExportCSV);
 	$loginBtn.addEventListener("click", handleLogin);
@@ -75,12 +94,20 @@ function init() {
 	$authToggle.addEventListener("click", handleAuthToggle);
 	$authClose.addEventListener("click", closeAuthModal);
 
-	// Close modal on Escape
+	const addEntryBtn = qs("#add-entry-btn");
+	if (addEntryBtn)
+		addEntryBtn.addEventListener("click", () => openEntryModal());
+
+	$entryForm?.addEventListener("submit", handleEntrySubmit);
+	$entryCancel?.addEventListener("click", closeEntryModal);
+
+	// Close auth modal on Escape
 	document.addEventListener("keydown", (ev) => {
 		if (ev.key === "Escape") {
-			if ($authModal && !$authModal.classList.contains("hidden")) {
+			if ($authModal && !$authModal.classList.contains("hidden"))
 				closeAuthModal();
-			}
+			if ($entryModal && !$entryModal.classList.contains("hidden"))
+				closeEntryModal();
 		}
 	});
 
@@ -88,23 +115,13 @@ function init() {
 	ensureDemoUser();
 	ensureDemoProjects();
 	populateProjectSelect(loadProjects());
+	populateEntryProjectSelect(loadProjects());
 
 	renderCurrent();
 }
 
-function populateProjectSelect(projects) {
-	if (!$projectSelect) return;
-	$projectSelect.innerHTML = "";
-	projects.forEach((p) => {
-		const opt = document.createElement("option");
-		opt.value = p.id;
-		opt.textContent = p.name;
-		$projectSelect.appendChild(opt);
-	});
-}
-
 /* ---------------------------
-   Pure helpers (exported)
+   Exports: core helpers (pure)
    --------------------------- */
 
 export function generateId() {
@@ -128,18 +145,17 @@ function pad(n) {
 	return n.toString().padStart(2, "0");
 }
 
-// Calculate totals: returns { today: ms, week: ms, month: ms }
-// week = last 7 days including reference day.
+/* Totals & date helpers */
 export function calculateTotals(
 	sessions,
 	referenceISO = new Date().toISOString(),
 ) {
 	const ref = new Date(referenceISO);
-	const refStartOfDay = startOfDay(ref);
+	const refStartOfDay = startOfDay(ref).getTime();
 	const refStartOfWeek = startOfDay(
 		new Date(ref.getTime() - 6 * 24 * 3600 * 1000),
-	);
-	const refStartOfMonth = startOfMonth(ref);
+	).getTime();
+	const refStartOfMonth = startOfMonth(ref).getTime();
 
 	let totalDay = 0;
 	let totalWeek = 0;
@@ -149,31 +165,16 @@ export function calculateTotals(
 		const sStart = Date.parse(s.start);
 		const sEnd = s.end ? Date.parse(s.end) : Date.now();
 		if (!(sEnd > sStart)) return;
-
-		const overlap = (aStart, aEnd) => {
-			const start = Math.max(sStart, aStart);
-			const end = Math.min(sEnd, aEnd);
-			return Math.max(0, end - start);
-		};
-
-		totalDay += overlap(
-			refStartOfDay.getTime(),
-			refStartOfDay.getTime() + 24 * 3600 * 1000,
-		);
-		totalWeek += overlap(
-			refStartOfWeek.getTime(),
-			ref.getTime() + 24 * 3600 * 1000,
-		);
-		totalMonth += overlap(
-			refStartOfMonth.getTime(),
-			startOfNextMonth(ref).getTime(),
-		);
+		const overlap = (aStart, aEnd) =>
+			Math.max(0, Math.min(sEnd, aEnd) - Math.max(sStart, aStart));
+		totalDay += overlap(refStartOfDay, refStartOfDay + 24 * 3600 * 1000);
+		totalWeek += overlap(refStartOfWeek, Date.parse(ref) + 24 * 3600 * 1000);
+		totalMonth += overlap(refStartOfMonth, startOfNextMonth(ref).getTime());
 	});
 
 	return { today: totalDay, week: totalWeek, month: totalMonth };
 }
 
-/* Date helpers */
 function startOfDay(d) {
 	const nd = new Date(d);
 	nd.setHours(0, 0, 0, 0);
@@ -192,7 +193,7 @@ function startOfNextMonth(d) {
 }
 
 /* ---------------------------
-   Core session ops
+   Session ops (core)
    --------------------------- */
 
 export function hasOpenSession(userId) {
@@ -233,8 +234,73 @@ export function clockOut(userId) {
 	return open;
 }
 
-export function exportCSV(userId) {
+/* Add / Update entries (pure) */
+export function addEntry(
+	userId,
+	{ startISO, endISO = null, notes = "", projectId = "proj-default" },
+) {
+	if (!userId) throw new Error("addEntry: missing userId");
 	const sessions = loadSessions(userId);
+	const now = new Date().toISOString();
+	const entry = {
+		id: generateId(),
+		userId,
+		start: startISO,
+		end: endISO,
+		notes,
+		projectId,
+		createdAt: now,
+		updatedAt: now,
+	};
+	sessions.push(entry);
+	saveSessions(userId, sessions);
+	return entry;
+}
+
+export function updateEntry(userId, entryId, changes = {}) {
+	if (!userId) throw new Error("updateEntry: missing userId");
+	const sessions = loadSessions(userId);
+	const idx = sessions.findIndex((s) => s.id === entryId);
+	if (idx === -1) throw new Error("Entry not found");
+	const now = new Date().toISOString();
+	sessions[idx] = { ...sessions[idx], ...changes, updatedAt: now };
+	saveSessions(userId, sessions);
+	return sessions[idx];
+}
+
+/* Filter by range + exportCSV */
+export function filterSessionsByRange(
+	sessions,
+	range = "all",
+	referenceISO = new Date().toISOString(),
+) {
+	if (!sessions || range === "all") return sessions;
+	const ref = new Date(referenceISO);
+	const sDay = startOfDay(ref).getTime();
+	const sWeek = startOfDay(
+		new Date(ref.getTime() - 6 * 24 * 3600 * 1000),
+	).getTime();
+	const sMonth = startOfMonth(ref).getTime();
+	const endRef = sDay + 24 * 3600 * 1000;
+
+	return sessions.filter((s) => {
+		const sStart = Date.parse(s.start);
+		const sEnd = s.end ? Date.parse(s.end) : Date.now();
+		if (range === "today") return sEnd > sDay && sStart < endRef;
+		if (range === "week") return sEnd > sWeek && sStart < endRef;
+		if (range === "month")
+			return sEnd > sMonth && sStart < startOfNextMonth(ref).getTime();
+		return true;
+	});
+}
+
+export function exportCSV(
+	userId,
+	range = "all",
+	referenceISO = new Date().toISOString(),
+) {
+	const all = loadSessions(userId);
+	const sessions = filterSessionsByRange(all, range, referenceISO);
 	const header = "id,start,end,durationSeconds,projectId,projectName,notes";
 	const projects = loadProjects();
 	const rows = sessions.map((s) => {
@@ -250,7 +316,7 @@ export function exportCSV(userId) {
 }
 
 /* ---------------------------
-   DOM rendering & timer
+   DOM rendering / UI
    --------------------------- */
 
 function renderCurrent() {
@@ -330,6 +396,10 @@ function renderSessions(sessions) {
 		tr.appendChild(notesTd);
 
 		const actionsTd = document.createElement("td");
+		const editBtn = document.createElement("button");
+		editBtn.className = "btn";
+		editBtn.textContent = "Edit";
+		editBtn.addEventListener("click", () => openEntryModal(s));
 		const delBtn = document.createElement("button");
 		delBtn.className = "btn";
 		delBtn.textContent = "Delete";
@@ -340,7 +410,7 @@ function renderSessions(sessions) {
 			saveSessions(uid, filtered);
 			renderCurrent();
 		});
-		actionsTd.append(delBtn);
+		actionsTd.append(editBtn, delBtn);
 		tr.appendChild(actionsTd);
 
 		$sessionsTbody.appendChild(tr);
@@ -366,12 +436,10 @@ function msToHoursString(ms) {
 function startLiveTimer(startISO) {
 	stopLiveTimer();
 	if (!$statusSince) return;
-
 	const update = () => {
 		const elapsed = Date.now() - Date.parse(startISO);
 		$statusSince.textContent = `since ${formatLocal(startISO)} — ${formatDuration(elapsed)}`;
 	};
-
 	update();
 	liveTimerId = setInterval(update, 1000);
 }
@@ -407,6 +475,101 @@ function formatLocalTime(iso) {
 }
 
 /* ---------------------------
+   Entry modal helpers & conversions
+   --------------------------- */
+
+function populateProjectSelect(projects) {
+	if (!$projectSelect) return;
+	$projectSelect.innerHTML = "";
+	projects.forEach((p) => {
+		const opt = document.createElement("option");
+		opt.value = p.id;
+		opt.textContent = p.name;
+		$projectSelect.appendChild(opt);
+	});
+}
+
+function populateEntryProjectSelect(projects) {
+	if (!$entryProject) return;
+	$entryProject.innerHTML = "";
+	projects.forEach((p) => {
+		const opt = document.createElement("option");
+		opt.value = p.id;
+		opt.textContent = p.name;
+		$entryProject.appendChild(opt);
+	});
+}
+
+function openEntryModal(entry = null) {
+	entryEditingId = entry?.id || null;
+	if ($entryModal) {
+		$entryModal.classList.remove("hidden");
+		$entryModal.setAttribute("aria-hidden", "false");
+		if (entry) {
+			$entryStart.value = isoToLocalDateTime(entry.start);
+			$entryEnd.value = entry.end ? isoToLocalDateTime(entry.end) : "";
+			$entryNotes.value = entry.notes || "";
+			$entryProject.value = entry.projectId || "proj-default";
+		} else {
+			$entryStart.value = isoToLocalDateTime(new Date().toISOString());
+			$entryEnd.value = "";
+			$entryNotes.value = "";
+			$entryProject.value = "proj-default";
+		}
+		$entryStart.focus();
+	}
+}
+
+function closeEntryModal() {
+	if ($entryModal) {
+		$entryModal.classList.add("hidden");
+		$entryModal.setAttribute("aria-hidden", "true");
+		const addBtn = qs("#add-entry-btn");
+		if (addBtn) addBtn.focus();
+	}
+}
+
+function handleEntrySubmit(e) {
+	e.preventDefault();
+	const uid = getCurrentUserId() || ensureDemoUser();
+	const startVal = $entryStart.value;
+	const endVal = $entryEnd.value;
+	const startISO = localDateTimeToISO(startVal);
+	const endISO = endVal ? localDateTimeToISO(endVal) : null;
+	const notes = $entryNotes.value || "";
+	const projectId = $entryProject.value || "proj-default";
+	if (entryEditingId) {
+		updateEntry(uid, entryEditingId, {
+			start: startISO,
+			end: endISO,
+			notes,
+			projectId,
+		});
+	} else {
+		addEntry(uid, { startISO, endISO, notes, projectId });
+	}
+	closeEntryModal();
+	renderCurrent();
+}
+
+function isoToLocalDateTime(iso) {
+	const d = new Date(iso);
+	const pad = (n) => n.toString().padStart(2, "0");
+	const yyyy = d.getFullYear();
+	const mm = pad(d.getMonth() + 1);
+	const dd = pad(d.getDate());
+	const hh = pad(d.getHours());
+	const min = pad(d.getMinutes());
+	return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+function localDateTimeToISO(local) {
+	if (!local) return null;
+	// new Date(local) treats local time, so toISOString gives UTC representation
+	const d = new Date(local);
+	return d.toISOString();
+}
+
+/* ---------------------------
    Event handlers & auth
    --------------------------- */
 
@@ -414,7 +577,6 @@ function handleClockToggle() {
 	try {
 		let uid = getCurrentUserId();
 		if (!uid) uid = ensureDemoUser();
-
 		if (hasOpenSession(uid)) {
 			clockOut(uid);
 		} else {
@@ -422,7 +584,6 @@ function handleClockToggle() {
 			const projectId = $projectSelect?.value || "proj-default";
 			clockIn(uid, note, projectId);
 		}
-
 		renderCurrent();
 	} catch (err) {
 		console.error(err);
@@ -433,12 +594,13 @@ function handleClockToggle() {
 function handleExportCSV() {
 	const uid = getCurrentUserId();
 	if (!uid) return alert("No user signed in (demo only).");
-	const csv = exportCSV(uid);
+	const range = qs("#export-range")?.value || "all";
+	const csv = exportCSV(uid, range);
 	const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement("a");
 	a.href = url;
-	a.download = "hours.csv";
+	a.download = `hours-${range}.csv`;
 	document.body.appendChild(a);
 	a.click();
 	a.remove();
@@ -455,6 +617,7 @@ function handleLogin() {
 	openAuthModal("login");
 }
 
+/* Auth modal helpers */
 function openAuthModal(mode = "login") {
 	authMode = mode;
 	if ($authModal) {
@@ -473,6 +636,8 @@ function closeAuthModal() {
 	if ($authModal) {
 		$authModal.classList.add("hidden");
 		$authModal.setAttribute("aria-hidden", "true");
+		const loginBtn = qs("#login-btn");
+		if (loginBtn) loginBtn.focus();
 	}
 }
 
@@ -485,7 +650,6 @@ function handleAuthSubmit(e) {
 	const uname = $authUsername.value.trim();
 	const pass = $authPassword.value || "";
 	if (!uname || !pass) return alert("Username and password required (demo)");
-
 	try {
 		if (authMode === "register") {
 			registerUser(uname, pass);
@@ -499,6 +663,7 @@ function handleAuthSubmit(e) {
 	}
 }
 
+/* Auth wrappers */
 export function registerUser(username, password) {
 	const user = createUser({ username, password });
 	setCurrentUserId(user.id);
@@ -514,7 +679,7 @@ export function logoutUser() {
 	setCurrentUserId(null);
 }
 
-/* Bootstrap */
+/* Bootstrap only in browser */
 if (typeof document !== "undefined") {
 	document.addEventListener("DOMContentLoaded", init);
 }
@@ -524,6 +689,8 @@ if (typeof window !== "undefined") {
 	window.__HT = {
 		clockIn,
 		clockOut,
+		addEntry,
+		updateEntry,
 		exportCSV,
 		calculateTotals,
 		formatDuration,
