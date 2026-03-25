@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "test": "vitest",
-    "start": "live-server --port=5173"
+    "test:unit": "vitest",
+    "test:e2e": "playwright test",
+    "test:ci": "npx playwright install && vitest --run && playwright test --reporter=list"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.8",

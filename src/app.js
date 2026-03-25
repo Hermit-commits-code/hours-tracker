@@ -1,6 +1,22 @@
 // src/app.js
 // Full app (Node-import safe) with demo auth, projects, totals, live timer,
 // add/update entry modal, export range, and tests-friendly exports.
+import {
+	calculateSessionDuration,
+	calculateTotals,
+	formatDuration,
+	generateId,
+	startOfDay,
+	startOfMonth,
+	startOfNextMonth,
+} from "./lib/helpers.js";
+
+export {
+	calculateSessionDuration,
+	calculateTotals,
+	formatDuration,
+	generateId,
+};
 
 import {
 	authenticateUser,
@@ -41,7 +57,6 @@ let $entryModal,
 	$entryEnd,
 	$entryNotes,
 	$entryProject,
-	$entrySave,
 	$entryCancel;
 let authMode = "login"; // or 'register'
 let liveTimerId = null;
@@ -83,7 +98,6 @@ function init() {
 	$entryEnd = $("#entry-end");
 	$entryNotes = $("#entry-notes");
 	$entryProject = $("#entry-project");
-	$entrySave = $("#entry-save");
 	$entryCancel = $("#entry-cancel");
 
 	$clockToggle.addEventListener("click", handleClockToggle);
@@ -124,72 +138,8 @@ function init() {
    Exports: core helpers (pure)
    --------------------------- */
 
-export function generateId() {
-	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-export function calculateSessionDuration(startISO, endISO) {
-	const ms = Date.parse(endISO) - Date.parse(startISO);
-	return ms >= 0 ? ms : 0;
-}
-
-export function formatDuration(ms) {
-	const totalSec = Math.floor(ms / 1000);
-	const hh = Math.floor(totalSec / 3600);
-	const mm = Math.floor((totalSec % 3600) / 60);
-	const ss = totalSec % 60;
-	return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
-}
-
 function pad(n) {
 	return n.toString().padStart(2, "0");
-}
-
-/* Totals & date helpers */
-export function calculateTotals(
-	sessions,
-	referenceISO = new Date().toISOString(),
-) {
-	const ref = new Date(referenceISO);
-	const refStartOfDay = startOfDay(ref).getTime();
-	const refStartOfWeek = startOfDay(
-		new Date(ref.getTime() - 6 * 24 * 3600 * 1000),
-	).getTime();
-	const refStartOfMonth = startOfMonth(ref).getTime();
-
-	let totalDay = 0;
-	let totalWeek = 0;
-	let totalMonth = 0;
-
-	sessions.forEach((s) => {
-		const sStart = Date.parse(s.start);
-		const sEnd = s.end ? Date.parse(s.end) : Date.now();
-		if (!(sEnd > sStart)) return;
-		const overlap = (aStart, aEnd) =>
-			Math.max(0, Math.min(sEnd, aEnd) - Math.max(sStart, aStart));
-		totalDay += overlap(refStartOfDay, refStartOfDay + 24 * 3600 * 1000);
-		totalWeek += overlap(refStartOfWeek, Date.parse(ref) + 24 * 3600 * 1000);
-		totalMonth += overlap(refStartOfMonth, startOfNextMonth(ref).getTime());
-	});
-
-	return { today: totalDay, week: totalWeek, month: totalMonth };
-}
-
-function startOfDay(d) {
-	const nd = new Date(d);
-	nd.setHours(0, 0, 0, 0);
-	return nd;
-}
-function startOfMonth(d) {
-	const nd = new Date(d);
-	nd.setDate(1);
-	nd.setHours(0, 0, 0, 0);
-	return nd;
-}
-function startOfNextMonth(d) {
-	const nd = startOfMonth(d);
-	nd.setMonth(nd.getMonth() + 1);
-	return nd;
 }
 
 /* ---------------------------
@@ -477,7 +427,7 @@ function formatLocalTime(iso) {
 /* ---------------------------
    Entry modal helpers & conversions
    --------------------------- */
-const _previousActiveElement = null;
+let __previousActiveElement = null;
 function focusFirstDescendant(el) {
 	if (!el) return;
 	const focusable = el.querySelectorAll(
@@ -534,6 +484,7 @@ function populateEntryProjectSelect(projects) {
 function openEntryModal(entry = null) {
 	entryEditingId = entry?.id || null;
 	if ($entryModal) {
+		__previousActiveElement = document.activeElement;
 		$entryModal.classList.remove("hidden");
 		$entryModal.setAttribute("aria-hidden", "false");
 		if (entry) {
@@ -547,7 +498,9 @@ function openEntryModal(entry = null) {
 			$entryNotes.value = "";
 			$entryProject.value = "proj-default";
 		}
-		$entryStart.focus();
+		// focus and trap Tab inside the modal
+		focusFirstDescendant($entryModal);
+		$entryModal.addEventListener("keydown", onEntryModalKeydown);
 	}
 }
 
@@ -555,9 +508,22 @@ function closeEntryModal() {
 	if ($entryModal) {
 		$entryModal.classList.add("hidden");
 		$entryModal.setAttribute("aria-hidden", "true");
-		const addBtn = qs("#add-entry-btn");
-		if (addBtn) addBtn.focus();
+		$entryModal.removeEventListener("keydown", onEntryModalKeydown);
+		// restore previous focus
+		if (__previousActiveElement) {
+			try {
+				__previousActiveElement.focus();
+			} catch {}
+			__previousActiveElement = null;
+		} else {
+			const addBtn = qs("#add-entry-btn");
+			if (addBtn) addBtn.focus();
+		}
 	}
+}
+
+function onEntryModalKeydown(e) {
+	trapTabKey(e, $entryModal);
 }
 
 function handleEntrySubmit(e) {
@@ -584,14 +550,17 @@ function handleEntrySubmit(e) {
 }
 
 function isoToLocalDateTime(iso) {
-	const d = new Date(iso);
-	const pad = (n) => n.toString().padStart(2, "0");
-	const yyyy = d.getFullYear();
-	const mm = pad(d.getMonth() + 1);
-	const dd = pad(d.getDate());
-	const hh = pad(d.getHours());
-	const min = pad(d.getMinutes());
-	return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+	try {
+		const d = new Date(iso);
+		const yyyy = d.getFullYear();
+		const mm = pad(d.getMonth() + 1);
+		const dd = pad(d.getDate());
+		const hh = pad(d.getHours());
+		const min = pad(d.getMinutes());
+		return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+	} catch {
+		return iso;
+	}
 }
 function localDateTimeToISO(local) {
 	if (!local) return null;
