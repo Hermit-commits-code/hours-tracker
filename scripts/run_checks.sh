@@ -24,6 +24,11 @@ else
 	echo "npx not found; skipping biome check"
 fi
 
+if [ -x "./scripts/health_check.sh" ]; then
+  echo "> verifiying dev server..."
+  ./scripts/health_check.sh http://127.0.0.1:5173 2 || echo "dev server not responding (ok for CI-less runs)"
+fi
+
 echo "> Running unit tests..."
 if npx vitest --run; then
 	echo "All checks passed."
