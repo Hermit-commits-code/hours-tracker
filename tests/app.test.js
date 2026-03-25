@@ -1,5 +1,5 @@
 // tests/app.test.js
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 // simple localStorage mock
 function createLocalStorageMock() {
@@ -22,8 +22,8 @@ function createLocalStorageMock() {
 
 global.localStorage = createLocalStorageMock();
 
-import * as storage from "../src/storage.js";
 import * as app from "../src/app.js";
+import * as storage from "../src/storage.js";
 
 beforeEach(() => {
 	global.localStorage.clear();
