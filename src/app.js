@@ -3,18 +3,18 @@
 // add/update entry modal, export range, and tests-friendly exports.
 
 import {
-	loadSessions,
-	saveSessions,
-	getCurrentUserId,
-	ensureDemoUser,
-	clearAllForUser,
-	setCurrentUserId,
-	loadProjects,
-	saveProjects,
-	ensureDemoProjects,
-	createUser,
 	authenticateUser,
+	clearAllForUser,
+	createUser,
+	ensureDemoProjects,
+	ensureDemoUser,
 	findUserById,
+	getCurrentUserId,
+	loadProjects,
+	loadSessions,
+	saveProjects,
+	saveSessions,
+	setCurrentUserId,
 } from "./storage.js";
 
 /* DOM refs (resolved in init) */
@@ -477,6 +477,37 @@ function formatLocalTime(iso) {
 /* ---------------------------
    Entry modal helpers & conversions
    --------------------------- */
+const _previousActiveElement = null;
+function focusFirstDescendant(el) {
+	if (!el) return;
+	const focusable = el.querySelectorAll(
+		'a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])',
+	);
+	if (focusable.length) {
+		focusable[0].focus();
+		return focusable[0];
+	}
+	return null;
+}
+
+function trapTabKey(e, modal) {
+	if (e.key !== "Tab") return;
+	const focusable = Array.from(
+		modal.querySelectorAll(
+			'a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])',
+		),
+	);
+	if (!focusable.length) return;
+	const first = focusable[0];
+	const last = focusable[focusable.length - 1];
+	if (e.shiftKey && document.activeElement === first) {
+		e.preventDefault();
+		last.focus();
+	} else if (!e.shiftKey && document.activeElement === last) {
+		e.preventDefault();
+		first.focus();
+	}
+}
 
 function populateProjectSelect(projects) {
 	if (!$projectSelect) return;
