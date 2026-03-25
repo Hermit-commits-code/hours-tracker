@@ -9,8 +9,8 @@ VALUE="${3:-General}"
 LIMIT="${4:-200}"
 
 if [ ! -f "$IN" ]; then
-  echo "CSV not found: $IN" >&2
-  exit 2
+	echo "CSV not found: $IN" >&2
+	exit 2
 fi
 
 # Simple approach: print header then lines matching the VALUE anywhere
